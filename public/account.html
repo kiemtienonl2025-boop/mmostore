@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tài khoản — PROTUBE.STORE</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">▶</div>
+      <div class="brand-name">PROTUBE<span>.STORE</span></div>
+    </div>
+    <div class="wallet-pill" id="walletPill">…</div>
+  </div>
+
+  <div class="page" id="pageContent">
+    <div class="sub">Đang tải…</div>
+  </div>
+
+  <div class="bottomnav" id="bottomNav"></div>
+
+  <!-- Top-up sheet -->
+  <div class="overlay" id="walletOverlay">
+    <div class="sheet">
+      <h3 style="font-size:16px; margin-bottom:4px;">Nạp tiền vào ví</h3>
+      <div class="sub">Bản demo: cộng tiền ngay, chưa nối cổng thanh toán thật.</div>
+      <div id="topupMsg" class="msg"></div>
+      <div class="field">
+        <label>Số tiền (VNĐ)</label>
+        <input type="number" id="topupAmount" placeholder="VD: 50000">
+      </div>
+      <button class="btn" onclick="doTopup()">Nạp ngay (demo)</button>
+      <div class="link-row" onclick="document.getElementById('walletOverlay').classList.remove('open')" style="cursor:pointer; margin-top:10px;">Đóng</div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let me = null;
+
+    async function render() {
+      const content = document.getElementById('pageContent');
+      try {
+        const { user } = await api('/auth/me');
+        if (!user) { window.location.href = '/login.html'; return; }
+        me = user;
+        content.innerHTML = `
+          <h1>Tài khoản của tôi</h1>
+          <div class="card">
+            <div class="sub" style="margin-bottom:4px;">Email</div>
+            <div style="font-weight:700; margin-bottom:14px;">${user.email}</div>
+            <div class="sub" style="margin-bottom:4px;">Số dư ví</div>
+            <div class="price" style="font-size:22px; margin-bottom:14px;">${fmtMoney(user.balance)}</div>
+            <button class="btn" onclick="document.getElementById('walletOverlay').classList.add('open')">Nạp tiền</button>
+          </div>
+          ${user.role === 'admin' ? `
+            <div class="card">
+              <div style="font-weight:800; margin-bottom:8px;">Quyền quản trị</div>
+              <div class="sub" style="margin-bottom:12px;">Bạn đang đăng nhập với quyền admin.</div>
+              <a href="/admin.html"><button class="btn secondary">Vào trang Admin</button></a>
+            </div>
+          ` : ''}
+          <button class="btn danger" onclick="logout()">Đăng xuất</button>
+        `;
+      } catch {
+        window.location.href = '/login.html';
+      }
+    }
+
+    async function doTopup() {
+      const amount = document.getElementById('topupAmount').value;
+      const msg = document.getElementById('topupMsg');
+      try {
+        await api('/wallet/topup-demo', { method: 'POST', body: JSON.stringify({ amount: parseInt(amount, 10) }) });
+        showMsg(msg, 'Nạp thành công (demo).', 'success');
+        mountTopbar();
+        render();
+      } catch (e) {
+        showMsg(msg, e.message, 'error');
+      }
+    }
+
+    async function logout() {
+      await api('/auth/logout', { method: 'POST' });
+      window.location.href = '/index.html';
+    }
+
+    (async () => {
+      await mountTopbar();
+      mountBottomNav('account');
+      render();
+    })();
+  </script>
+</body>
+</html>

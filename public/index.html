@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTUBE.STORE — YouTube Premium giá tốt</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">▶</div>
+      <div class="brand-name">PROTUBE<span>.STORE</span></div>
+    </div>
+    <div class="wallet-pill" id="walletPill">…</div>
+  </div>
+
+  <div class="page">
+    <h1>YouTube Premium giá sinh viên</h1>
+    <div class="sub">Không quảng cáo, nghe nền thả ga. Kích hoạt trong 5 phút.</div>
+
+    <div id="msg" class="msg"></div>
+    <div class="grid" id="productGrid"><div class="sub">Đang tải sản phẩm…</div></div>
+  </div>
+
+  <div class="bottomnav" id="bottomNav"></div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let currentUser = null;
+
+    async function loadProducts() {
+      const { products } = await api('/products');
+      const grid = document.getElementById('productGrid');
+      if (products.length === 0) {
+        grid.innerHTML = '<div class="sub">Chưa có sản phẩm nào.</div>';
+        return;
+      }
+      grid.innerHTML = products.map(p => `
+        <div class="p-card">
+          <h3>${p.name}</h3>
+          <div class="desc">${p.description || ''}</div>
+          <div class="price-row">
+            <span class="price">${fmtMoney(p.price)}</span>
+            ${p.old_price ? `<span class="old-price">${fmtMoney(p.old_price)}</span>` : ''}
+          </div>
+          <button class="btn small" onclick="buy(${p.id})">Mua ngay</button>
+        </div>
+      `).join('');
+    }
+
+    async function buy(productId) {
+      const msg = document.getElementById('msg');
+      if (!currentUser) {
+        window.location.href = '/login.html';
+        return;
+      }
+      try {
+        await api('/orders', { method: 'POST', body: JSON.stringify({ product_id: productId }) });
+        showMsg(msg, 'Mua thành công! Xem chi tiết ở mục Đơn hàng.', 'success');
+        mountTopbar();
+        loadProducts();
+      } catch (e) {
+        showMsg(msg, e.message, 'error');
+      }
+    }
+
+    (async () => {
+      currentUser = await mountTopbar();
+      mountBottomNav('home');
+      loadProducts();
+    })();
+  </script>
+</body>
+</html>

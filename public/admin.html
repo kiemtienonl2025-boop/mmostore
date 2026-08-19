@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — PROTUBE.STORE</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">▶</div>
+      <div class="brand-name">PROTUBE<span>.STORE</span> <span style="color:var(--muted); font-size:11px;">/ admin</span></div>
+    </div>
+    <div class="wallet-pill" onclick="window.location.href='/account.html'">Tài khoản</div>
+  </div>
+
+  <div class="page" style="max-width:800px;">
+    <h1>Quản trị sản phẩm</h1>
+    <div class="sub">Thêm, sửa, ẩn/hiện hoặc xoá sản phẩm.</div>
+
+    <div id="msg" class="msg"></div>
+
+    <div class="card">
+      <div style="font-weight:800; margin-bottom:10px;" id="formTitle">Thêm sản phẩm mới</div>
+      <input type="hidden" id="editId">
+      <div class="field"><label>Tên sản phẩm</label><input id="f_name"></div>
+      <div class="field"><label>Danh mục (mã ngắn, vd: rieng, family, nangcap, music)</label><input id="f_category"></div>
+      <div class="field"><label>Mô tả</label><textarea id="f_description" rows="2"></textarea></div>
+      <div style="display:flex; gap:10px;">
+        <div class="field" style="flex:1;"><label>Giá bán (₫)</label><input type="number" id="f_price"></div>
+        <div class="field" style="flex:1;"><label>Giá gốc (₫, tuỳ chọn)</label><input type="number" id="f_old_price"></div>
+      </div>
+      <div class="field"><label>Tồn kho</label><input type="number" id="f_stock"></div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn" onclick="saveProduct()" id="saveBtn">Thêm sản phẩm</button>
+        <button class="btn secondary" onclick="resetForm()" id="cancelBtn" style="display:none;">Huỷ</button>
+      </div>
+    </div>
+
+    <div id="productList"></div>
+
+    <h1 style="margin-top:26px;">Tất cả đơn hàng</h1>
+    <div id="orderList"><div class="sub">Đang tải…</div></div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    async function guardAdmin() {
+      const { user } = await api('/auth/me');
+      if (!user || user.role !== 'admin') {
+        window.location.href = '/login.html';
+        throw new Error('not admin');
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('editId').value = '';
+      document.getElementById('f_name').value = '';
+      document.getElementById('f_category').value = '';
+      document.getElementById('f_description').value = '';
+      document.getElementById('f_price').value = '';
+      document.getElementById('f_old_price').value = '';
+      document.getElementById('f_stock').value = '';
+      document.getElementById('formTitle').textContent = 'Thêm sản phẩm mới';
+      document.getElementById('saveBtn').textContent = 'Thêm sản phẩm';
+      document.getElementById('cancelBtn').style.display = 'none';
+    }
+
+    function editProduct(p) {
+      document.getElementById('editId').value = p.id;
+      document.getElementById('f_name').value = p.name;
+      document.getElementById('f_category').value = p.category;
+      document.getElementById('f_description').value = p.description || '';
+      document.getElementById('f_price').value = p.price;
+      document.getElementById('f_old_price').value = p.old_price || '';
+      document.getElementById('f_stock').value = p.stock;
+      document.getElementById('formTitle').textContent = 'Sửa sản phẩm #' + p.id;
+      document.getElementById('saveBtn').textContent = 'Lưu thay đổi';
+      document.getElementById('cancelBtn').style.display = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function saveProduct() {
+      const msg = document.getElementById('msg');
+      const id = document.getElementById('editId').value;
+      const body = {
+        name: document.getElementById('f_name').value.trim(),
+        category: document.getElementById('f_category').value.trim(),
+        description: document.getElementById('f_description').value.trim(),
+        price: parseInt(document.getElementById('f_price').value, 10),
+        old_price: document.getElementById('f_old_price').value ? parseInt(document.getElementById('f_old_price').value, 10) : null,
+        stock: parseInt(document.getElementById('f_stock').value || '0', 10),
+      };
+      try {
+        if (id) {
+          await api('/products/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        } else {
+          await api('/products', { method: 'POST', body: JSON.stringify(body) });
+        }
+        showMsg(msg, 'Đã lưu sản phẩm.', 'success');
+        resetForm();
+        loadProducts();
+      } catch (e) {
+        showMsg(msg, e.message, 'error');
+      }
+    }
+
+    async function toggleActive(p) {
+      await api('/products/' + p.id, { method: 'PUT', body: JSON.stringify({ active: p.active ? 0 : 1 }) });
+      loadProducts();
+    }
+
+    async function deleteProduct(id) {
+      if (!confirm('Xoá sản phẩm này?')) return;
+      await api('/products/' + id, { method: 'DELETE' });
+      loadProducts();
+    }
+
+    async function loadProducts() {
+      const { products } = await api('/products?all=1');
+      const list = document.getElementById('productList');
+      list.innerHTML = `
+        <table>
+          <tr><th>Tên</th><th>Giá</th><th>Kho</th><th>Trạng thái</th><th></th></tr>
+          ${products.map(p => `
+            <tr>
+              <td>${p.name}<br><span class="sub" style="font-size:11px;">${p.category}</span></td>
+              <td>${fmtMoney(p.price)}</td>
+              <td>${p.stock}</td>
+              <td><span class="tag ${p.active ? 'on' : 'off'}">${p.active ? 'Đang bán' : 'Đã ẩn'}</span></td>
+              <td style="white-space:nowrap;">
+                <button class="btn small secondary" onclick='editProduct(${JSON.stringify(p)})'>Sửa</button>
+                <button class="btn small secondary" onclick="toggleActive(${JSON.stringify(p).replace(/"/g, '&quot;')})">${p.active ? 'Ẩn' : 'Hiện'}</button>
+                <button class="btn small danger" onclick="deleteProduct(${p.id})">Xoá</button>
+              </td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    async function loadOrders() {
+      const { orders } = await api('/orders');
+      const list = document.getElementById('orderList');
+      if (orders.length === 0) {
+        list.innerHTML = '<div class="card sub">Chưa có đơn hàng nào.</div>';
+        return;
+      }
+      list.innerHTML = `
+        <table>
+          <tr><th>#</th><th>Khách</th><th>Sản phẩm</th><th>Giá</th><th>Thời gian</th></tr>
+          ${orders.map(o => `
+            <tr>
+              <td>${o.id}</td>
+              <td>${o.user_email}</td>
+              <td>${o.product_name}</td>
+              <td>${fmtMoney(o.price)}</td>
+              <td>${new Date(o.created_at).toLocaleString('vi-VN')}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    (async () => {
+      await guardAdmin();
+      loadProducts();
+      loadOrders();
+    })();
+  </script>
+</body>
+</html>

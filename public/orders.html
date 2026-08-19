@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Đơn hàng — PROTUBE.STORE</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">▶</div>
+      <div class="brand-name">PROTUBE<span>.STORE</span></div>
+    </div>
+    <div class="wallet-pill" id="walletPill">…</div>
+  </div>
+
+  <div class="page">
+    <h1>Đơn hàng của tôi</h1>
+    <div class="sub">Lịch sử các gói bạn đã mua.</div>
+    <div id="list"><div class="sub">Đang tải…</div></div>
+  </div>
+
+  <div class="bottomnav" id="bottomNav"></div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    async function load() {
+      const list = document.getElementById('list');
+      try {
+        const { orders } = await api('/orders/mine');
+        if (orders.length === 0) {
+          list.innerHTML = '<div class="card sub">Bạn chưa có đơn hàng nào.</div>';
+          return;
+        }
+        list.innerHTML = orders.map(o => `
+          <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <div style="font-weight:800;">${o.product_name}</div>
+              <div class="price">${fmtMoney(o.price)}</div>
+            </div>
+            <div class="sub">Mã đơn #${o.id} · ${new Date(o.created_at).toLocaleString('vi-VN')} · ${o.status}</div>
+          </div>
+        `).join('');
+      } catch {
+        window.location.href = '/login.html';
+      }
+    }
+
+    (async () => {
+      await mountTopbar();
+      mountBottomNav('orders');
+      load();
+    })();
+  </script>
+</body>
+</html>
