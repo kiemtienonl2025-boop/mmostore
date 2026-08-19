@@ -1,0 +1,15 @@
+{
+  "name": "protube-store",
+  "version": "1.0.0",
+  "description": "Web ban YouTube Premium - dang ky/dang nhap, quan ly san pham, don hang, trang admin",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0"
+  }
+}
