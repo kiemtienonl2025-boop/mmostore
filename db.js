@@ -27,6 +27,34 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS topup_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  ref_code TEXT UNIQUE NOT NULL,
+  amount INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  matched_sepay_id TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  completed_at TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS processed_webhook_ids (
+  sepay_id TEXT PRIMARY KEY,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL,
+  username TEXT NOT NULL,
+  password TEXT NOT NULL,
+  extra_info TEXT,
+  order_id INTEGER,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (product_id) REFERENCES products(id)
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -34,11 +62,26 @@ CREATE TABLE IF NOT EXISTS orders (
   product_name TEXT NOT NULL,
   price INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'completed',
+  account_username TEXT,
+  account_password TEXT,
+  account_extra_info TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (product_id) REFERENCES products(id)
 );
 `);
+
+// Migration safety net: add the account_* columns if this DB was created before this feature existed.
+const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
+if (!orderCols.includes('account_username')) {
+  db.exec('ALTER TABLE orders ADD COLUMN account_username TEXT');
+}
+if (!orderCols.includes('account_password')) {
+  db.exec('ALTER TABLE orders ADD COLUMN account_password TEXT');
+}
+if (!orderCols.includes('account_extra_info')) {
+  db.exec('ALTER TABLE orders ADD COLUMN account_extra_info TEXT');
+}
 
 // Seed an admin account on first run only.
 const adminExists = db.prepare('SELECT id FROM users WHERE role = ?').get('admin');
