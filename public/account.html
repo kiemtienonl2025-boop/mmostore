@@ -25,20 +25,39 @@
   <div class="overlay" id="walletOverlay">
     <div class="sheet">
       <h3 style="font-size:16px; margin-bottom:4px;">Nạp tiền vào ví</h3>
-      <div class="sub">Bản demo: cộng tiền ngay, chưa nối cổng thanh toán thật.</div>
+      <div class="sub" id="stepIntro">Nhập số tiền, hệ thống sẽ tạo mã QR chuyển khoản riêng cho bạn.</div>
       <div id="topupMsg" class="msg"></div>
-      <div class="field">
-        <label>Số tiền (VNĐ)</label>
-        <input type="number" id="topupAmount" placeholder="VD: 50000">
+
+      <div id="stepAmount">
+        <div class="field">
+          <label>Số tiền (VNĐ)</label>
+          <input type="number" id="topupAmount" placeholder="VD: 50000" min="1000">
+        </div>
+        <button class="btn" onclick="createTopup()">Tạo mã QR chuyển khoản</button>
       </div>
-      <button class="btn" onclick="doTopup()">Nạp ngay (demo)</button>
-      <div class="link-row" onclick="document.getElementById('walletOverlay').classList.remove('open')" style="cursor:pointer; margin-top:10px;">Đóng</div>
+
+      <div id="stepQr" style="display:none; text-align:center;">
+        <img id="qrImg" src="" alt="QR chuyển khoản" style="width:220px; height:220px; border-radius:12px; margin:0 auto 14px; display:block; background:#fff; padding:8px;">
+        <div class="sub" style="text-align:left; margin-bottom:10px;">
+          Ngân hàng: <b id="qrBank"></b><br>
+          Số tài khoản: <b id="qrAccNum"></b><br>
+          Chủ tài khoản: <b id="qrAccName"></b><br>
+          Số tiền: <b id="qrAmount"></b><br>
+          Nội dung CK (giữ nguyên): <b id="qrContent" style="color:var(--gold);"></b>
+        </div>
+        <div id="qrStatus" class="sub" style="margin-bottom:10px;">Đang chờ chuyển khoản…</div>
+        <button class="btn secondary" onclick="checkStatusNow()">Tôi đã chuyển, kiểm tra ngay</button>
+      </div>
+
+      <div class="link-row" onclick="closeWallet()" style="cursor:pointer; margin-top:10px;">Đóng</div>
     </div>
   </div>
 
   <script src="/js/app.js"></script>
   <script>
     let me = null;
+    let pollTimer = null;
+    let currentRef = null;
 
     async function render() {
       const content = document.getElementById('pageContent');
@@ -53,7 +72,7 @@
             <div style="font-weight:700; margin-bottom:14px;">${user.email}</div>
             <div class="sub" style="margin-bottom:4px;">Số dư ví</div>
             <div class="price" style="font-size:22px; margin-bottom:14px;">${fmtMoney(user.balance)}</div>
-            <button class="btn" onclick="document.getElementById('walletOverlay').classList.add('open')">Nạp tiền</button>
+            <button class="btn" onclick="openWallet()">Nạp tiền</button>
           </div>
           ${user.role === 'admin' ? `
             <div class="card">
@@ -69,18 +88,60 @@
       }
     }
 
-    async function doTopup() {
+    function openWallet() {
+      document.getElementById('walletOverlay').classList.add('open');
+      resetTopupSheet();
+    }
+    function closeWallet() {
+      document.getElementById('walletOverlay').classList.remove('open');
+      if (pollTimer) clearInterval(pollTimer);
+    }
+    function resetTopupSheet() {
+      document.getElementById('stepAmount').style.display = 'block';
+      document.getElementById('stepQr').style.display = 'none';
+      document.getElementById('topupAmount').value = '';
+      document.getElementById('topupMsg').style.display = 'none';
+      if (pollTimer) clearInterval(pollTimer);
+    }
+
+    async function createTopup() {
       const amount = document.getElementById('topupAmount').value;
       const msg = document.getElementById('topupMsg');
       try {
-        await api('/wallet/topup-demo', { method: 'POST', body: JSON.stringify({ amount: parseInt(amount, 10) }) });
-        showMsg(msg, 'Nạp thành công (demo).', 'success');
-        mountTopbar();
-        render();
+        const data = await api('/wallet/create-topup-request', {
+          method: 'POST', body: JSON.stringify({ amount: parseInt(amount, 10) })
+        });
+        currentRef = data.refCode;
+        document.getElementById('qrImg').src = data.qrUrl;
+        document.getElementById('qrBank').textContent = data.bankCode;
+        document.getElementById('qrAccNum').textContent = data.bankAccountNumber;
+        document.getElementById('qrAccName').textContent = data.bankAccountName;
+        document.getElementById('qrAmount').textContent = fmtMoney(data.amount);
+        document.getElementById('qrContent').textContent = data.refCode;
+        document.getElementById('stepAmount').style.display = 'none';
+        document.getElementById('stepQr').style.display = 'block';
+        document.getElementById('qrStatus').textContent = 'Đang chờ chuyển khoản…';
+
+        pollTimer = setInterval(checkStatus, 4000);
       } catch (e) {
         showMsg(msg, e.message, 'error');
       }
     }
+
+    async function checkStatus() {
+      if (!currentRef) return;
+      try {
+        const data = await api('/wallet/topup-status/' + currentRef);
+        if (data.status === 'completed') {
+          document.getElementById('qrStatus').textContent = '✅ Đã cộng tiền vào ví!';
+          clearInterval(pollTimer);
+          mountTopbar();
+          render();
+          setTimeout(closeWallet, 1500);
+        }
+      } catch {}
+    }
+    function checkStatusNow() { checkStatus(); }
 
     async function logout() {
       await api('/auth/logout', { method: 'POST' });
