@@ -49,6 +49,66 @@ router.put('/:id', requireAdmin, (req, res) => {
 // Admin: delete product
 router.delete('/:id', requireAdmin, (req, res) => {
   db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+  db.prepare('DELETE FROM product_accounts WHERE product_id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Admin: list credential stock for a product (available + already delivered).
+router.get('/:id/accounts', requireAdmin, (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM product_accounts WHERE product_id = ? ORDER BY id DESC'
+  ).all(req.params.id);
+  res.json({ accounts: rows });
+});
+
+// Admin: bulk add credentials, one per line as "username:password" or "username:password:extra info".
+router.post('/:id/accounts', requireAdmin, (req, res) => {
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+  if (!product) return res.status(404).json({ error: 'Không tìm thấy sản phẩm.' });
+
+  const raw = (req.body.lines || '').trim();
+  if (!raw) return res.status(400).json({ error: 'Chưa nhập tài khoản nào.' });
+
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const insert = db.prepare(
+    'INSERT INTO product_accounts (product_id, username, password, extra_info) VALUES (?, ?, ?, ?)'
+  );
+  let added = 0;
+  const tx = db.transaction(() => {
+    for (const line of lines) {
+      const parts = line.split(':');
+      if (parts.length < 2) continue; // bỏ qua dòng sai định dạng
+      const username = parts[0].trim();
+      const password = parts[1].trim();
+      const extra = parts.slice(2).join(':').trim() || null;
+      if (!username || !password) continue;
+      insert.run(product.id, username, password, extra);
+      added++;
+    }
+    // Cập nhật tồn kho = số tài khoản chưa giao cho đơn nào.
+    const available = db.prepare(
+      'SELECT COUNT(*) AS c FROM product_accounts WHERE product_id = ? AND order_id IS NULL'
+    ).get(product.id).c;
+    db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(available, product.id);
+  });
+  tx();
+
+  res.json({ added, skipped: lines.length - added });
+});
+
+// Admin: delete a single unused credential (only if not yet delivered to a customer).
+router.delete('/:id/accounts/:accId', requireAdmin, (req, res) => {
+  const acc = db.prepare('SELECT * FROM product_accounts WHERE id = ? AND product_id = ?')
+    .get(req.params.accId, req.params.id);
+  if (!acc) return res.status(404).json({ error: 'Không tìm thấy tài khoản.' });
+  if (acc.order_id) return res.status(400).json({ error: 'Tài khoản này đã giao cho khách, không thể xoá.' });
+
+  db.prepare('DELETE FROM product_accounts WHERE id = ?').run(acc.id);
+  const available = db.prepare(
+    'SELECT COUNT(*) AS c FROM product_accounts WHERE product_id = ? AND order_id IS NULL'
+  ).get(req.params.id).c;
+  db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(available, req.params.id);
+
   res.json({ ok: true });
 });
 
