@@ -39,7 +39,14 @@
               <div style="font-weight:800;">${o.product_name}</div>
               <div class="price">${fmtMoney(o.price)}</div>
             </div>
-            <div class="sub">Mã đơn #${o.id} · ${new Date(o.created_at).toLocaleString('vi-VN')} · ${o.status}</div>
+            <div class="sub" style="margin-bottom:10px;">Mã đơn #${o.id} · ${new Date(o.created_at).toLocaleString('vi-VN')} · ${o.status}</div>
+            ${o.account_username ? `
+              <div style="background:var(--bg-elev); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:12.5px;">
+                <div style="margin-bottom:4px;">👤 Tài khoản: <b>${o.account_username}</b></div>
+                <div style="margin-bottom:${o.account_extra_info ? '4px' : '0'};">🔑 Mật khẩu: <b>${o.account_password}</b></div>
+                ${o.account_extra_info ? `<div>ℹ️ ${o.account_extra_info}</div>` : ''}
+              </div>
+            ` : ''}
           </div>
         `).join('');
       } catch {
