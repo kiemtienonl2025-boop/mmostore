@@ -40,8 +40,35 @@
 
     <div id="productList"></div>
 
+    <!-- Account stock management sheet -->
+    <div class="overlay" id="accOverlay">
+      <div class="sheet" style="max-width:600px;">
+        <h3 style="font-size:16px; margin-bottom:2px;">Kho tài khoản — <span id="accProductName"></span></h3>
+        <div class="sub" style="margin-bottom:14px;">Mỗi khách mua sẽ được giao đúng 1 dòng bên dưới (theo thứ tự thêm vào).</div>
+        <div id="accMsg" class="msg"></div>
+
+        <div class="field">
+          <label>Thêm hàng loạt — mỗi dòng 1 tài khoản, định dạng <code>username:password</code> (có thể thêm <code>:ghi chú</code> ở cuối)</label>
+          <textarea id="accLines" rows="5" placeholder="email1@gmail.com:matkhau123
+email2@gmail.com:matkhau456:Đã bật 2FA sẵn"></textarea>
+        </div>
+        <button class="btn" onclick="addAccounts()">Thêm vào kho</button>
+
+        <div style="margin-top:16px;">
+          <div class="sub" style="margin-bottom:8px;">Danh sách trong kho:</div>
+          <div id="accList"></div>
+        </div>
+
+        <div class="link-row" onclick="document.getElementById('accOverlay').classList.remove('open')" style="cursor:pointer; margin-top:14px;">Đóng</div>
+      </div>
+    </div>
+
     <h1 style="margin-top:26px;">Tất cả đơn hàng</h1>
     <div id="orderList"><div class="sub">Đang tải…</div></div>
+
+    <h1 style="margin-top:26px;">Yêu cầu nạp tiền</h1>
+    <div class="sub">Đối soát nếu có giao dịch bị lệch số tiền hoặc không khớp mã tự động.</div>
+    <div id="topupList"><div class="sub">Đang tải…</div></div>
   </div>
 
   <script src="/js/app.js"></script>
@@ -132,12 +159,69 @@
               <td style="white-space:nowrap;">
                 <button class="btn small secondary" onclick='editProduct(${JSON.stringify(p)})'>Sửa</button>
                 <button class="btn small secondary" onclick="toggleActive(${JSON.stringify(p).replace(/"/g, '&quot;')})">${p.active ? 'Ẩn' : 'Hiện'}</button>
+                <button class="btn small secondary" onclick="openAccounts(${p.id}, '${p.name.replace(/'/g, "\\'")}')">TK/MK</button>
                 <button class="btn small danger" onclick="deleteProduct(${p.id})">Xoá</button>
               </td>
             </tr>
           `).join('')}
         </table>
       `;
+    }
+
+    let currentAccProductId = null;
+
+    async function openAccounts(productId, productName) {
+      currentAccProductId = productId;
+      document.getElementById('accProductName').textContent = productName;
+      document.getElementById('accLines').value = '';
+      document.getElementById('accMsg').style.display = 'none';
+      document.getElementById('accOverlay').classList.add('open');
+      loadAccounts();
+    }
+
+    async function addAccounts() {
+      const msg = document.getElementById('accMsg');
+      const lines = document.getElementById('accLines').value;
+      try {
+        const data = await api(`/products/${currentAccProductId}/accounts`, {
+          method: 'POST', body: JSON.stringify({ lines })
+        });
+        showMsg(msg, `Đã thêm ${data.added} tài khoản${data.skipped ? `, bỏ qua ${data.skipped} dòng sai định dạng` : ''}.`, 'success');
+        document.getElementById('accLines').value = '';
+        loadAccounts();
+        loadProducts();
+      } catch (e) {
+        showMsg(msg, e.message, 'error');
+      }
+    }
+
+    async function loadAccounts() {
+      const { accounts } = await api(`/products/${currentAccProductId}/accounts`);
+      const list = document.getElementById('accList');
+      if (accounts.length === 0) {
+        list.innerHTML = '<div class="sub">Kho trống.</div>';
+        return;
+      }
+      list.innerHTML = `
+        <table>
+          <tr><th>Tài khoản</th><th>Mật khẩu</th><th>Trạng thái</th><th></th></tr>
+          ${accounts.map(a => `
+            <tr>
+              <td>${a.username}</td>
+              <td>${a.password}</td>
+              <td><span class="tag ${a.order_id ? 'off' : 'on'}">${a.order_id ? 'Đã giao (đơn #' + a.order_id + ')' : 'Còn trống'}</span></td>
+              <td>${!a.order_id ? `<button class="btn small danger" onclick="deleteAccount(${a.id})">Xoá</button>` : ''}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    async function deleteAccount(accId) {
+      if (!confirm('Xoá tài khoản này khỏi kho?')) return;
+      await api(`/products/${currentAccProductId}/accounts/${accId}`, { method: 'DELETE' });
+      loadAccounts();
+      loadProducts();
     }
 
     async function loadOrders() {
@@ -163,10 +247,34 @@
       `;
     }
 
+    async function loadTopups() {
+      const { topups } = await api('/wallet/topup-requests');
+      const list = document.getElementById('topupList');
+      if (topups.length === 0) {
+        list.innerHTML = '<div class="card sub">Chưa có yêu cầu nạp tiền nào.</div>';
+        return;
+      }
+      list.innerHTML = `
+        <table>
+          <tr><th>Mã</th><th>Khách</th><th>Số tiền</th><th>Trạng thái</th><th>Thời gian</th></tr>
+          ${topups.map(t => `
+            <tr>
+              <td>${t.ref_code}</td>
+              <td>${t.user_email}</td>
+              <td>${fmtMoney(t.amount)}</td>
+              <td><span class="tag ${t.status === 'completed' ? 'on' : 'off'}">${t.status === 'completed' ? 'Đã cộng tiền' : 'Đang chờ'}</span></td>
+              <td>${new Date(t.created_at).toLocaleString('vi-VN')}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
     (async () => {
       await guardAdmin();
       loadProducts();
       loadOrders();
+      loadTopups();
     })();
   </script>
 </body>
